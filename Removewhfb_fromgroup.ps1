@@ -1,6 +1,11 @@
 
+# Description: This script removes Windows Hello for Business authentication for all users in a group.
+
 # Import the AzureAD module
 Import-Module AzureAD
+Import-Module -Name Az.Accounts
+Import-Module -Name Az.Resources
+Import-Module -Name Microsoft.Graph.Authentication
 
 # Define the variables
 $clientId = "<your_client_id>"
