@@ -24,7 +24,7 @@ $body = @{
 $authResponse = Invoke-RestMethod -Uri $authUrl -Method POST -Body $body
 $accessToken = $authResponse.access_token
 
-# Define the function to delete the Windows Hello for Business authentication method
+# Define the function to delete the Windows Hello for Business authentication method #5/18 this requires more work
 function RemoveWindowsHelloForBusinessMethod($userId, $methodId) {
     $url = "https://graph.microsoft.com/v1.0/users/$userId/authentication/windowsHelloForBusinessMethods/$methodId"
     $headers = @{
@@ -33,12 +33,12 @@ function RemoveWindowsHelloForBusinessMethod($userId, $methodId) {
     Invoke-RestMethod -Uri $url -Method DELETE -Headers $headers
 }
 
-# Get the list of users in the group
+# Get the list of users in the group  #5/19 this works
 $usersUrl = "https://graph.microsoft.com/v1.0/groups/$groupId/members?$select=id"
 $usersResponse = Invoke-RestMethod -Uri $usersUrl -Method GET -Headers $headers
 $users = $usersResponse.value
 
-# Remove Windows Hello for Business authentication for each user
+# Remove Windows Hello for Business authentication for each user. This invokes the function defined above. This part continues to fail regardless of API permissions assigned to it
 foreach ($user in $users) {
     $userId = $user.id
     $methodsUrl = "https://graph.microsoft.com/v1.0/users/$userId/authentication/windowsHelloForBusinessMethods"
