@@ -1,0 +1,18 @@
+//from: https://techcommunity.microsoft.com/t5/security-compliance-and-identity/advanced-hunting-for-microsoft-purview-data-loss-prevention-dlp/ba-p/3821330
+//Identify what actions have been made on a document and associated Sensitivity label.
+
+let document = "sample.txt";
+CloudAppEvents
+// for speed of executing the query and remove possible false matches use the filters below.
+//| where tolower(RawEventData.UserId) == "youruser@yourdom.com"
+//| where RawEventData.Sha256 == "52eb73d06b265f3e6cfeca5477ea22efc300ab42514635ed20d18e77272ff125"
+//| where RawEventData.ListItemUniqueId == "6c8306d8-2e84-40a4-b39a-4841bfac1c82"
+| search document
+| extend Users = tostring(RawEventData.UserId)
+ | extend LabelGUID1 = parse_json(tostring(RawEventData.SensitivityLabelEventData)).SensitivityLabelId
+    | extend LabelGUID2 = iff(isempty(tostring(RawEventData.LabelId)), LabelGUID1, tostring(RawEventData.LabelId))
+    | extend LabelGUID3 = iff(isempty(tostring(RawEventData.SensitivityLabelId)), LabelGUID2, tostring(RawEventData.SensitivityLabelId))
+     | extend OldSensitivityLabelId = tostring(parse_json(tostring(RawEventData.SensitivityLabelEventData)).OldSensitivityLabelId)
+    | extend LabelGUID = iff(isempty(tostring(LabelGUID3)),OldSensitivityLabelId, tostring(LabelGUID3))  
+| project Timestamp,ActionType,Users,CountryCode,LabelGUID,ReportId,RawEventData
+| sort by Timestamp
