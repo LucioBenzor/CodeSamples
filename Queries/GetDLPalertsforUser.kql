@@ -1,0 +1,54 @@
+//From https://techcommunity.microsoft.com/t5/security-compliance-and-identity/advanced-hunting-for-microsoft-purview-data-loss-prevention-dlp/ba-p/3821330
+
+let user = ('user@dom.com');
+CloudAppEvents
+| where ActionType has "DLPRuleMatch" or ActionType has "DLPRuleUndo"
+| where tolower(user) == tolower(RawEventData.UserId) 
+| extend PolicyName_ = tostring(parse_json(tostring(RawEventData.PolicyDetails))[0].PolicyName)
+| extend SensitiveInformationTypeName_ = tostring(parse_json(tostring(parse_json(tostring(parse_json(tostring(parse_json(tostring(RawEventData.PolicyDetails))[0].Rules))[0].ConditionsMatched)).SensitiveInformation))[0].SensitiveInformationTypeName)
+| extend FileName_ = tostring(parse_json(tostring(RawEventData.SharePointMetaData)).FileName)
+| extend RuleName_ = tostring(parse_json(tostring(parse_json(tostring(RawEventData.PolicyDetails))[0].Rules))[0].RuleName)
+| extend Severity_ = tostring(parse_json(tostring(parse_json(tostring(RawEventData.PolicyDetails))[0].Rules))[0].Severity)
+| extend Attachments_ = tostring(parse_json(tostring(RawEventData.Item)).Attachments)
+| extend Recipients = strcat("To:",RawEventData.ExchangeMetaData.To, " CC:",RawEventData.ExchangeMetaData.CC," BCC:",RawEventData.ExchangeMetaData.BCC) 
+| extend SharePointMetaData_SiteCollectionUrl_s  = tostring(parse_json(tostring(RawEventData.SharePointMetaData)).SiteCollectionUrl)
+| extend Documents = iff(isempty(FileName_), Attachments_, FileName_) 
+| join kind = leftouter 
+    ( 
+    CloudAppEvents 
+| where RawEventData.Operation == "SecureLinkUsed" or RawEventData.Operation == "AddedToSecureLink" 
+| extend SourceFileName = tostring(RawEventData.SourceFileName) 
+| extend SharePointMetaData_SiteCollectionUrl_s = tostring(RawEventData.SiteUrl)
+| extend UserId = tostring(RawEventData.UserId) 
+| extend TargetUserOrGroupName = tostring(RawEventData.TargetUserOrGroupName) 
+            | summarize by SharePointMetaData_SiteCollectionUrl_s,SourceFileName,TargetUserOrGroupName
+            | summarize TargetUserOrGroupName = make_list(strcat(TargetUserOrGroupName)) by SharePointMetaData_SiteCollectionUrl_s,SourceFileName
+            | summarize take_any(TargetUserOrGroupName) by SourceFileName,SharePointMetaData_SiteCollectionUrl_s
+|project SourceFileName, SharePointMetaData_SiteCollectionUrl_s, TargetUserOrGroupName
+    ) 
+    on SharePointMetaData_SiteCollectionUrl_s   
+| extend TargetUsers = iff(isnotempty(tostring(TargetUserOrGroupName)), tostring(TargetUserOrGroupName), Recipients)
+| extend Subject = tostring(parse_json(tostring(RawEventData.ExchangeMetaData)).Subject)
+| extend PolicyName_EndPoint = tostring(parse_json(tostring(RawEventData.PolicyDetails))[0].PolicyName)
+| extend PolicyName = iff(isempty(PolicyName_), PolicyName_EndPoint, PolicyName_)   
+| extend Workload = tostring(RawEventData.Workload)
+| extend Object = tostring(RawEventData.ObjectId)
+| join kind=leftouter
+(
+CloudAppEvents
+| where ActionType has "DLPRuleMatch" or ActionType has "DLPRuleUndo"
+| where RawEventData.Workload has "Endpoint"
+| extend SensitiveInfoTypeName_ = tostring(parse_json(tostring(parse_json(tostring(RawEventData.EndpointMetaData)).SensitiveInfoTypeData))[0].SensitiveInfoTypeName)
+| extend EndPointFile = tostring(RawEventData.ObjectId)
+| project EndPointFile,SensitiveInfoTypeName_
+)
+on $left.Object == $right.EndPointFile
+| extend Documents = iff(isempty(Documents), EndPointFile, Documents) 
+| extend SensitiveInformationType = iff(isempty(SensitiveInformationTypeName_), SensitiveInfoTypeName_, SensitiveInformationTypeName_) 
+| extend EndpointOperation_ = tostring(parse_json(tostring(RawEventData.EndpointMetaData)).EndpointOperation)
+| extend TargetDomain = tostring(parse_json(tostring(RawEventData.EndpointMetaData)).TargetDomain)
+| extend Target = iff(isempty(tostring(TargetDomain)), TargetUsers, tostring(TargetDomain))   
+| project  Timestamp,ActionType,Workload,PolicyName,SensitiveInformationType,Documents,Target,Subject,EndpointOperation_,Severity_
+| summarize arg_max(Timestamp, *) by Workload,PolicyName,SensitiveInformationType,Documents,Target
+| project  Timestamp,ActionType,Workload,PolicyName,SensitiveInformationType,Documents,Target,Subject,EndpointOperation_,Severity_
+| sort by Timestamp
