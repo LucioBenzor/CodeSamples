@@ -1,0 +1,118 @@
+//From: https://techcommunity.microsoft.com/t5/security-compliance-and-identity/advanced-hunting-for-microsoft-purview-data-loss-prevention-dlp/ba-p/3821330
+//Identify who has access or has accessed a document in SharePoint or OneDrive for Business  
+
+let document = "filename"; 
+let user = ('useraccount'); 
+let DLP = ( CloudAppEvents
+    | where RawEventData.Workload in ('SharePoint', 'OneDrive')
+    | where ActionType == "DLPRuleMatch" 
+    | extend FilePathUrl_ = url_decode(tostring(RawEventData.SharePointMetaData.FilePathUrl))
+    | extend path = parse_path(FilePathUrl_)
+    | where path.Filename has document
+    | extend DirectoryPath = tostring(path.DirectoryPath)
+    | summarize by DirectoryPath );
+let officedata = (
+    CloudAppEvents
+    | where RawEventData.Operation == "SecureLinkUsed" or RawEventData.Operation == "AddedToSecureLink"
+    | extend ObjectId_ = tostring(RawEventData.ObjectId)
+    | where ObjectId_ has_any (DLP)
+    | extend SharePointMetaData_SiteCollectionUrl = tostring(RawEventData.SiteUrl)
+    | extend SharePointMetaData_FileName = tostring((RawEventData.SourceFileName))
+    | extend Account = tostring(RawEventData.UserId)
+    | extend Targetsplit = split(Account, "#")
+    | extend TargetUserOrGroupName = iff(isempty(RawEventData.TargetUserOrGroupName), Targetsplit[1], RawEventData.TargetUserOrGroupName)
+    //Exclude internal domains if required
+    //| where TargetUserOrGroupName !has "mydom1.com"
+    | extend TargetUserOrGroupName = tolower(TargetUserOrGroupName)
+    | summarize
+        by
+        SharePointMetaData_FileName,
+        SharePointMetaData_SiteCollectionUrl,
+        TargetUserOrGroupName,
+        ObjectId_,
+        Account);
+let dlpmain = (
+    CloudAppEvents
+    | where ActionType == "DLPRuleMatch"
+    | where RawEventData.Workload == "OneDrive" or RawEventData.Workload == "SharePoint"
+    | extend FilePathUrl_ = url_decode(tostring(RawEventData.SharePointMetaData.FilePathUrl))
+    | extend path = parse_path(FilePathUrl_)
+    | where path.Filename has document
+    | extend Account = tostring(RawEventData.UserId)
+    | where Account has user
+    | extend ObjectId_ = url_decode(tostring(ObjectName))
+    | extend SharePointMetaData_SiteCollectionUrl =  tostring((RawEventData.SharePointMetaData.SiteCollectionUrl))
+    | where tolower(RawEventData.UserId) == tolower(Account)
+    | where RawEventData.Workload in ('SharePoint', 'OneDrive')
+    | extend SourceFileName = tostring(RawEventData.SourceFileName)
+    );
+let folder = (dlpmain
+    | join kind = leftouter
+        (officedata
+            | summarize
+            by
+            SharePointMetaData_SiteCollectionUrl,
+            SharePointMetaData_FileName,
+            TargetUserOrGroupName,
+            ObjectId_
+        | summarize TargetUserOrGroupName = make_list(strcat(TargetUserOrGroupName))
+            by
+            ObjectId_,
+            SharePointMetaData_SiteCollectionUrl,
+            SharePointMetaData_FileName
+        | summarize take_any(TargetUserOrGroupName)
+            by
+            ObjectId_,
+            SharePointMetaData_SiteCollectionUrl,
+            SharePointMetaData_FileName
+        | join kind = leftouter
+            (
+            officedata
+            | summarize
+                by
+                SharePointMetaData_SiteCollectionUrl,
+                SharePointMetaData_FileName,
+                TargetUserOrGroupName,
+                ObjectId_
+            | extend Domsplit = split(TargetUserOrGroupName, "@")
+            | extend domain = Domsplit[1]
+            | summarize TargetDomain = make_list(strcat(domain)) by SharePointMetaData_FileName, ObjectId_
+            | summarize take_any(TargetDomain) by SharePointMetaData_FileName, ObjectId_
+            )
+            on ObjectId_
+        )
+        on ObjectId_
+    );
+let files = (folder
+    //| where TargetUserOrGroupName == ""
+    | join kind = leftouter
+        (officedata
+        | summarize TargetUserOrGroupName = make_list(strcat(TargetUserOrGroupName)) by SharePointMetaData_FileName, SharePointMetaData_SiteCollectionUrl
+        | summarize take_any(TargetUserOrGroupName) by SharePointMetaData_FileName, SharePointMetaData_SiteCollectionUrl
+        | join kind = leftouter
+            (
+            officedata
+            | summarize
+                by
+                SharePointMetaData_SiteCollectionUrl,
+                SharePointMetaData_FileName,
+                TargetUserOrGroupName
+            | extend Domsplit = split(TargetUserOrGroupName, "@")
+            | extend domain = Domsplit[1]
+            | summarize TargetDomain = make_list(strcat(domain)) by SharePointMetaData_FileName
+            | summarize take_any(TargetDomain) by SharePointMetaData_FileName
+            )
+            on SharePointMetaData_FileName
+        )
+        on SharePointMetaData_FileName, SharePointMetaData_SiteCollectionUrl
+    | extend TargetUserOrGroupName = TargetUserOrGroupName1
+    | extend TargetDomain = TargetDomain1
+    | where TargetUserOrGroupName != ""
+    );
+    union folder, files
+| extend FileName = tostring(parse_json(tostring(RawEventData.SharePointMetaData)).FileName)
+| summarize arg_max(Timestamp, *) by ObjectId_, Account, tostring(RawEventData.Id)
+| extend FileNameEncoded = url_encode(FileName)
+| extend MDALink = (strcat('https://security.microsoft.com/cloudapps/files?filename=eq(',FileNameEncoded,')')) //Use this link to view older operations directly from Microsoft Defender for Cloud Apps
+| project Timestamp,FileName,Target= TargetUserOrGroupName,SPOD_Path = ObjectId_,RawEventData,MDALink
+| sort by Timestamp
