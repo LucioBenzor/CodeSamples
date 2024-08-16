@@ -1,6 +1,6 @@
 # CodeSamples
  
-*Add-DLPSenerExclusions.ps1 - This script iterates through Microsoft DLP rules and adds an exclusion to policies assigned against Exchange
+*Add-DLPSenerExclusions.ps1* - This script iterates through Microsoft DLP rules and adds an exclusion to policies assigned against Exchange
 
  *Removewhfb_fromgroup.ps1* -
  This script is meant to iterate over an azure AD group of users to remove the windows hello for business auth method assocaited with their accounts. 
