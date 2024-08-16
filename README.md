@@ -9,4 +9,4 @@
 
 *GrantAVScanPermission.ps1* - The Microsoft Sentinel playbook *Run MDE Antivirus - Incident Triggered* requires specific MDE permissions to run. The only way to endow permissions to a managed identity is via the CLI. This Powershell script improves on the instructions presented on the Azure portal.
 
-*GrantAVScanPermission-MI.ps1 - This github copilot-generated script is an improvement on my own *GrantAVScanPermission.ps1* script by removing redundant code by creating a loop and adding a function to do the heavy lifting
+*GrantAVScanPermission-MI.ps1* - This github copilot-generated script is an improvement on my own *GrantAVScanPermission.ps1* script by removing redundant code by creating a loop and adding a function to do the heavy lifting
