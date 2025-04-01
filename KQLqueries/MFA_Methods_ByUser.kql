@@ -1,3 +1,4 @@
+//Finds MFA methods from the last 30 days
 SigninLogs
 | where TimeGenerated > ago(30d)
 //You can exclude guests if you want, they may be harder to move to more secure methods, comment out the below line to include all users
