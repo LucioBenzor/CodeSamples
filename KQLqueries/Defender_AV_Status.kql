@@ -1,0 +1,6 @@
+//This query gathers the Defender AV status for each device. Note the requirement to add a timestamp
+DeviceTvmInfoGathering
+| extend AvMode = iif(tostring(AdditionalFields.AvMode) == '0', 'Active', iif(tostring(AdditionalFields.AvMode) == '1', 'Passive',iif(tostring(AdditionalFields.AvMode) == '2', 'Disabled', iif(tostring(AdditionalFields.AvMode) == '5', 'PassiveAudit',iif(tostring(AdditionalFields.AvMode) == '4', 'EDR Blocked' ,'Unknown')))))  
+| where AvMode == "Active"
+| join kind=innerunique  DeviceInfo on DeviceId
+| distinct  DeviceId, DeviceName, AvMode, OSPlatform, Timestamp, PublicIP, SensorHealthState
