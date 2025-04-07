@@ -26,3 +26,12 @@ DeviceEvents
 | extend IsAudit = tostring (parsedfields.IsAudit)
 | invoke FileProfile("InitiatingProcessSHA1",10000000)
 | distinct IsAudit, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA1, IsExecutable, ThreatName, GlobalPrevalence, SoftwareName, Publisher, Signer, Issuer, IsCertificateValid, IsRootSignerMicrosoft, SignatureState
+
+//This query will detect the block use of copied or impersonated system tools
+DeviceEvents
+| where Timestamp > ago(30d) 
+| where ActionType == "AsrAbusedSystemToolAudited“
+| extend parsedfields = parse_json(AdditionalFields)
+| extend IsAudit = tostring (parsedfields.IsAudit)
+| invoke FileProfile("SHA1",10000)
+| distinct IsAudit, FolderPath, FileName, ProcessCommandLine, SHA1, IsExecutable, ThreatName, GlobalPrevalence, SoftwareName, Publisher, Signer, Issuer, IsCertificateValid, IsRootSignerMicrosoft, SignatureState
