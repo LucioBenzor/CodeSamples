@@ -1,0 +1,40 @@
+// This will group the number of ASR rule mitigations that were fired during auditing/block/warn mode 
+DeviceEvents
+| where Timestamp > ago(1d)
+| where ActionType startswith "Asr"
+| summarize count(DeviceName) by ActionType
+| sort by count_DeviceName asc
+
+
+
+//This query will look at ASR events audited or blocked by the block credential stealing processes from touching lsass.exe rule and output useful information on the executables
+DeviceEvents
+| where Timestamp > ago(1d) 
+| where ActionType == "AsrLsassCredentialTheftAudited" == "AsrLsassCredentialTheftBlocked"
+| extend parsedfields = parse_json(AdditionalFields)
+| extend IsAudit = tostring (parsedfields.IsAudit)
+| invoke FileProfile("InitiatingProcessSHA1",10000)
+| distinct IsAudit, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA1, IsExecutable, ThreatName, GlobalPrevalence, SoftwareName, Publisher, Signer, Issuer, IsCertificateValid, IsRootSignerMicrosoft, SignatureState
+
+
+
+//This query will look at ASR events from the Psecewmi rule in audit or block mode
+DeviceEvents
+| where Timestamp > ago(30d) 
+| where ActionType =="AsrPsexecWmiChildProcessAudited" or ActionType == "AsrPsexecWmiChildProcessBlocked"
+| extend parsedfields = parse_json(AdditionalFields)
+| extend IsAudit = tostring (parsedfields.IsAudit)
+| invoke FileProfile("InitiatingProcessSHA1",10000000)
+| distinct IsAudit, InitiatingProcessFolderPath, InitiatingProcessCommandLine, InitiatingProcessSHA1, IsExecutable, ThreatName, GlobalPrevalence, SoftwareName, Publisher, Signer, Issuer, IsCertificateValid, IsRootSignerMicrosoft, SignatureState
+
+
+
+//This query will detect the block use of copied or impersonated system tools
+DeviceEvents
+| where Timestamp > ago(30d) 
+| where ActionType == "AsrAbusedSystemToolAudited"
+| extend parsedfields = parse_json(AdditionalFields)
+| extend IsAudit = tostring (parsedfields.IsAudit)
+| invoke FileProfile("SHA1",10000)
+| distinct IsAudit, FolderPath, FileName, ProcessCommandLine, SHA1, IsExecutable, ThreatName, GlobalPrevalence, SoftwareName, Publisher, Signer, Issuer, IsCertificateValid, IsRootSignerMicrosoft, SignatureState
+//todo: add distinct devices to this. How many users are causing this audit entries?
