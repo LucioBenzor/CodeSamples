@@ -1,6 +1,6 @@
 # ListVulnsByDeviceGroup
 
-The purpose of this script it to perform a POC of MDE's ability to list device vulnerabilities via Device tags. This script works by
+The purpose of this script is to perform a POC of MDE's ability to list device vulnerabilities via Device tags. This script works by
 
 1. Quering the Defender for Endpoint API to get devices with a certain tag
 2. Creating a nested group in memory with the results
