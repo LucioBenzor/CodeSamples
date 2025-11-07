@@ -1,0 +1,24 @@
+Both Malware and HighConfidence Phish are not affected by direct entries in the Tenant allow block list and the default anti-spam and anti-malware
+policy take action on emails classified as a threat by either policy. As a good practice for operationalizing MDO, it's useful for admins
+to know sending patterns
+
+//Use the EmailEvents table to find messages quarantined in the last 7 days, then group by sender domain or address for counts.
+//This query looks at mail that was deemed high confidence phish and displays the top 10 domains
+
+
+EmailEvents
+| where Timestamp > ago(7d)
+| where DeliveryLocation == "Quarantine"
+| where todynamic(ConfidenceLevel).Phish == "High"
+| summarize QuarantineCount = count() by SenderFromDomain
+| top 10 by QuarantineCount
+
+
+//This query looks at the high confidence phish and displays the top 10 senders.
+
+EmailEvents
+| where Timestamp > ago(7d)
+| where DeliveryLocation == "Quarantine"
+| where todynamic(ConfidenceLevel).Phish == "High"
+| summarize QuarantineCount = count() by SenderFromAddress
+| top 10 by QuarantineCount
